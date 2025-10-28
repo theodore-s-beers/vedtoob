@@ -3,7 +3,6 @@ use clap::Parser;
 use reqwest::blocking::get;
 use serde_json::{Map, Value};
 use std::io::Write;
-use tempfile::NamedTempFile;
 
 /// Fetch a Boot.dev lesson readme by UUID or course/chapter/lesson
 #[derive(Parser, Debug)]
@@ -102,7 +101,7 @@ fn get_lesson_id(course_slug: &str, ch_no: u8, lesson_no: u8) -> Result<String, 
 
 fn get_readme_by_id(id: &str) -> Result<String, anyhow::Error> {
     let lookup_url = format!("https://api.boot.dev/v1/static/lessons/{}", id);
-    let response_text = reqwest::blocking::get(lookup_url)?.text()?;
+    let response_text = get(lookup_url)?.text()?;
     let data: Map<String, Value> = serde_json::from_str(&response_text)?;
 
     let lesson = data
@@ -125,7 +124,7 @@ fn get_readme_by_id(id: &str) -> Result<String, anyhow::Error> {
 }
 
 fn prettify(readme: &str) -> Result<String, anyhow::Error> {
-    let mut input_file = NamedTempFile::new()?;
+    let mut input_file = tempfile::NamedTempFile::new()?;
     write!(input_file, "{}", readme)?;
 
     let pandoc = std::process::Command::new("pandoc")
