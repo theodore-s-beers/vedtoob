@@ -8,36 +8,21 @@ use std::io::Write;
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// Lesson UUID
-    #[arg(long)]
-    id: Option<String>,
     /// Course slug
     #[arg(short, long, requires_all = &["chapter", "lesson"])]
-    course: Option<String>,
+    course: String,
     /// Chapter number
     #[arg(short = 'p', long, requires_all = &["course", "lesson"])]
-    chapter: Option<u8>,
+    chapter: u8,
     /// Lesson number
     #[arg(short, long, requires_all = &["course", "chapter"])]
-    lesson: Option<u8>,
+    lesson: u8,
 }
 
 fn main() -> Result<(), anyhow::Error> {
     let args = Args::parse();
-    if args.id.is_none() && args.course.is_none() {
-        return Err(anyhow!("No lesson specified"));
-    }
-
-    let id = if let Some(uuid) = args.id {
-        uuid
-    } else {
-        get_lesson_id(
-            &args.course.unwrap(),
-            args.chapter.unwrap(),
-            args.lesson.unwrap(),
-        )
-        .context("Failed to get lesson ID")?
-    };
+    let id = get_lesson_id(&args.course, args.chapter, args.lesson)
+        .context("Failed to get lesson ID")?;
 
     let readme = get_readme_by_id(&id).context("Failed to get lesson readme")?;
     let prettified = prettify(&readme).context("Failed to prettify readme")?;
@@ -51,15 +36,11 @@ fn main() -> Result<(), anyhow::Error> {
 }
 
 fn get_lesson_id(course_slug: &str, ch_no: u8, lesson_no: u8) -> Result<String, anyhow::Error> {
-    let courses_response = get("https://api.boot.dev/v1/courses")?.text()?;
-    let courses: Vec<Map<String, Value>> = serde_json::from_str(&courses_response)?;
+    let course_uuid = get_course_id(course_slug)?;
+    let course_url = format!("https://api.boot.dev/v1/courses/{}", course_uuid);
+    let course_data: Map<String, Value> = get(course_url)?.json()?;
 
-    let course = courses
-        .iter()
-        .find(|course| course.get("Slug").and_then(|v| v.as_str()) == Some(course_slug))
-        .context("No course found with this slug")?;
-
-    let chapters: Vec<Map<String, Value>> = course
+    let chapters: Vec<Map<String, Value>> = course_data
         .get("Chapters")
         .and_then(|v| v.as_array())
         .context("No chapters found in this course")?
@@ -97,6 +78,20 @@ fn get_lesson_id(course_slug: &str, ch_no: u8, lesson_no: u8) -> Result<String, 
         .context("No UUID found for this lesson")?;
 
     Ok(lesson_id.to_owned())
+}
+
+fn get_course_id(slug: &str) -> Result<String, anyhow::Error> {
+    let url = format!("https://api.boot.dev/v1/static/courses/slug/{}", slug);
+    let data: Map<String, Value> = get(url)?.json()?;
+    let course_data = data
+        .get("Course")
+        .and_then(|v| v.as_object())
+        .context("No course found with this slug")?;
+    let uuid = course_data
+        .get("UUID")
+        .and_then(|v| v.as_str())
+        .context("No ID found for this course")?;
+    Ok(uuid.to_owned())
 }
 
 fn get_readme_by_id(id: &str) -> Result<String, anyhow::Error> {
