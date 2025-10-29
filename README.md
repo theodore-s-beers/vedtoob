@@ -6,10 +6,7 @@
 cargo install --git https://github.com/theodore-s-beers/vedtoob
 ```
 
-Caveats:
-
-- [`pandoc`](https://github.com/jgm/pandoc) is a runtime dependency of the `show` subcommand, i.e., it needs to be in your `PATH`.
-- If you use `cargo install --git`, you may later need to add the `--force` flag to install updated versions.
+Caveat: [`pandoc`](https://github.com/jgm/pandoc) is a runtime dependency of the `show` subcommand, i.e., it needs to be in your `PATH`.
 
 ## Usage
 
