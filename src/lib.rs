@@ -8,9 +8,12 @@ use std::io::Write;
 //
 
 pub fn get_chapters(slug: &str) -> Result<Vec<String>, anyhow::Error> {
-    let course_uuid = get_course_id(slug)?;
-    let course_url = format!("https://api.boot.dev/v1/courses/{}", course_uuid);
-    let course_data: Map<String, Value> = get(course_url)?.json()?;
+    let url = format!("https://api.boot.dev/v1/static/courses/slug/{}", slug);
+    let data: Map<String, Value> = get(url)?.json()?;
+    let course_data = data
+        .get("Course")
+        .and_then(|v| v.as_object())
+        .context("No course found with this slug")?;
 
     let chapters: Vec<Map<String, Value>> = course_data
         .get("Chapters")
