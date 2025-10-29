@@ -17,13 +17,13 @@ enum Commands {
     /// Show the readme for a specific lesson
     Show {
         /// Course slug
-        #[arg(short, long, requires_all = &["chapter", "lesson"])]
+        #[arg(short, long)]
         course: String,
         /// Chapter number
-        #[arg(short = 'p', long, requires_all = &["course", "lesson"])]
+        #[arg(short = 'p', long)]
         chapter: u8,
         /// Lesson number
-        #[arg(short, long, requires_all = &["course", "chapter"])]
+        #[arg(short, long)]
         lesson: u8,
     },
     /// List the slugs of all available courses
