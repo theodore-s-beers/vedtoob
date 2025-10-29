@@ -106,6 +106,41 @@ pub fn get_lesson_id(course_slug: &str, ch_no: u8, lesson_no: u8) -> Result<Stri
     Ok(lesson_id.to_owned())
 }
 
+pub fn get_lessons(course_slug: &str, ch_no: u8) -> Result<Vec<String>, anyhow::Error> {
+    let course_uuid = get_course_id(course_slug)?;
+    let course_url = format!("https://api.boot.dev/v1/courses/{}", course_uuid);
+    let course_data: Map<String, Value> = get(course_url)?.json()?;
+
+    let chapters: Vec<Map<String, Value>> = course_data
+        .get("Chapters")
+        .and_then(|v| v.as_array())
+        .context("No chapters found in this course")?
+        .iter()
+        .filter_map(|chapter| chapter.as_object().cloned())
+        .collect();
+
+    if chapters.len() < ch_no as usize {
+        return Err(anyhow!("No chapter {} in course '{}'", ch_no, course_slug));
+    }
+
+    let chapter_data = &chapters[(ch_no - 1) as usize];
+
+    let lessons: Vec<String> = chapter_data
+        .get("Lessons")
+        .and_then(|v| v.as_array())
+        .context("No lessons found in this chapter")?
+        .iter()
+        .filter_map(|lesson| {
+            lesson
+                .get("Title")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_owned())
+        })
+        .collect();
+
+    Ok(lessons)
+}
+
 pub fn get_readme_by_id(id: &str) -> Result<String, anyhow::Error> {
     let lookup_url = format!("https://api.boot.dev/v1/static/lessons/{}", id);
     let response_text = get(lookup_url)?.text()?;

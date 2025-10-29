@@ -1,6 +1,8 @@
 use anyhow::Context;
 use clap::{Parser, Subcommand};
-use vedtoob::{get_chapters, get_course_slugs, get_lesson_id, get_readme_by_id, prettify};
+use vedtoob::{
+    get_chapters, get_course_slugs, get_lesson_id, get_lessons, get_readme_by_id, prettify,
+};
 
 /// View Boot.dev lesson readmes in the terminal
 #[derive(Parser, Debug)]
@@ -31,6 +33,15 @@ enum Commands {
         /// Course slug
         #[arg(short, long)]
         course: String,
+    },
+    /// List the lessons of a given chapter in a course
+    ListLessons {
+        /// Course slug
+        #[arg(short, long)]
+        course: String,
+        /// Chapter number
+        #[arg(short = 'p', long)]
+        chapter: u8,
     },
 }
 
@@ -67,6 +78,19 @@ fn main() -> Result<(), anyhow::Error> {
         Commands::ListChapters { course } => {
             let chapters = get_chapters(&course).context("Failed to get chapters")?;
             let output: String = chapters
+                .iter()
+                .enumerate()
+                .map(|(i, title)| format!("{}: {}\n", i + 1, title))
+                .collect();
+
+            bat::PrettyPrinter::new()
+                .input_from_bytes(output.as_bytes())
+                .language("yaml")
+                .print()?;
+        }
+        Commands::ListLessons { course, chapter } => {
+            let lessons = get_lessons(&course, chapter).context("Failed to get lessons")?;
+            let output: String = lessons
                 .iter()
                 .enumerate()
                 .map(|(i, title)| format!("{}: {}\n", i + 1, title))
