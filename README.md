@@ -12,7 +12,13 @@ List the chapters of a given course:
 vedtoob list-chapters --course learn-sql
 ```
 
-Show the readme of a given lesson (there are also short forms of the flags):
+List the lessons in a given course chapter (there are also short forms of these flags):
+
+```sh
+vedtoob list-lessons --course learn-sql --chapter 9
+```
+
+Show the readme for a given lesson:
 
 ```sh
 vedtoob show --course learn-sql --chapter 9 --lesson 1

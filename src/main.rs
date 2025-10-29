@@ -34,7 +34,7 @@ enum Commands {
         #[arg(short, long)]
         course: String,
     },
-    /// List the lessons of a given chapter in a course
+    /// List the lessons in a given course chapter
     ListLessons {
         /// Course slug
         #[arg(short, long)]
