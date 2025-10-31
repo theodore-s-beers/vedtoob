@@ -2,6 +2,7 @@ use anyhow::{Context, anyhow};
 use reqwest::blocking::get;
 use serde_json::{Map, Value};
 use std::io::Write;
+use std::process::{Command, Stdio};
 
 //
 // Public functions
@@ -166,19 +167,25 @@ pub fn get_readme_by_id(id: &str) -> Result<String, anyhow::Error> {
 }
 
 pub fn prettify(readme: &str) -> Result<String, anyhow::Error> {
-    let mut input_file = tempfile::NamedTempFile::new()?;
-    write!(input_file, "{}", readme)?;
+    let mut child = Command::new("pandoc")
+        .args(["-f", "gfm", "-t", "gfm", "--columns=80"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .context("Failed to start pandoc process")?;
 
-    let pandoc = std::process::Command::new("pandoc")
-        .arg(input_file.path())
-        .arg("-t")
-        .arg("markdown")
-        .arg("--columns=80")
-        .output()
-        .context("Failed to call Pandoc")?;
+    child
+        .stdin
+        .as_mut()
+        .context("Failed to open pandoc stdin")?
+        .write_all(readme.as_bytes())?;
 
-    let output = str::from_utf8(&pandoc.stdout)?;
-    Ok(output.to_owned())
+    let output = child
+        .wait_with_output()
+        .context("Failed to read pandoc output")?;
+
+    let output_str = String::from_utf8_lossy(&output.stdout).into_owned();
+    Ok(output_str)
 }
 
 //
