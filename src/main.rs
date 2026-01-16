@@ -1,105 +1,64 @@
-use anyhow::Context;
-use clap::{Parser, Subcommand};
-use vedtoob::{
-    get_chapters, get_course_slugs, get_lesson_id, get_lessons, get_readme_by_id, prettify,
+use clap::Parser;
+use ratatui::{
+    DefaultTerminal,
+    crossterm::event::{self, Event, KeyCode, KeyEventKind},
 };
+use std::io;
+use vedtoob::{app::App, pandoc_available, ui};
 
-/// View Boot.dev lesson readmes in the terminal
 #[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
-struct Args {
-    #[command(subcommand)]
-    command: Commands,
+#[command(
+    name = "vedtoob",
+    version,
+    about = "TUI browser for Boot.dev courses",
+    long_about = "TUI browser for Boot.dev courses\n\nControls:\n  q: quit\n  Esc: return to courses list\n  /: search courses\n  Enter: select\n  h/l: back/forward\n  j/k: down/up\n\nDependencies:\n  pandoc (required on PATH)\n  network access to api.boot.dev"
+)]
+struct Cli {}
+
+fn main() -> io::Result<()> {
+    let _cli = Cli::parse();
+
+    if !pandoc_available() {
+        eprintln!("Error: pandoc is required but not found in PATH");
+        eprintln!("See https://github.com/jgm/pandoc");
+        std::process::exit(1);
+    }
+
+    let mut terminal = ratatui::init();
+    let result = run(&mut terminal);
+    ratatui::restore();
+    result
 }
 
-#[derive(Subcommand, Debug)]
-enum Commands {
-    /// Show the readme for a given lesson
-    Show {
-        /// Course slug
-        #[arg(short, long)]
-        course: String,
-        /// Chapter number
-        #[arg(short = 'p', long)]
-        chapter: u8,
-        /// Lesson number
-        #[arg(short, long)]
-        lesson: u8,
-    },
-    /// List the slugs of all available courses
-    ListCourses,
-    /// List the chapters of a given course
-    ListChapters {
-        /// Course slug
-        #[arg(short, long)]
-        course: String,
-    },
-    /// List the lessons in a given course chapter
-    ListLessons {
-        /// Course slug
-        #[arg(short, long)]
-        course: String,
-        /// Chapter number
-        #[arg(short = 'p', long)]
-        chapter: u8,
-    },
-}
+fn run(terminal: &mut DefaultTerminal) -> io::Result<()> {
+    let mut app = App::new();
 
-fn main() -> Result<(), anyhow::Error> {
-    let args = Args::parse();
+    loop {
+        terminal.draw(|frame| ui::render(&mut app, frame))?;
 
-    match args.command {
-        Commands::Show {
-            course,
-            chapter,
-            lesson,
-        } => {
-            let id = get_lesson_id(&course, chapter, lesson).context("Failed to get lesson ID")?;
-            let readme = get_readme_by_id(&id).context("Failed to get lesson readme")?;
-            let prettified = prettify(&readme).context("Failed to prettify readme")?;
-
-            bat::PrettyPrinter::new()
-                .input_from_bytes(prettified.as_bytes())
-                .language("markdown")
-                .print()?;
-        }
-        Commands::ListCourses => {
-            let courses = get_course_slugs().context("Failed to get course slugs")?;
-            let output: String = courses
-                .iter()
-                .map(|(slug, title)| format!("{} = \"{}\"\n", slug, title))
-                .collect();
-
-            bat::PrettyPrinter::new()
-                .input_from_bytes(output.as_bytes())
-                .language("toml")
-                .print()?;
-        }
-        Commands::ListChapters { course } => {
-            let chapters = get_chapters(&course).context("Failed to get chapters")?;
-            let output: String = chapters
-                .iter()
-                .enumerate()
-                .map(|(i, title)| format!("{}: {}\n", i + 1, title))
-                .collect();
-
-            bat::PrettyPrinter::new()
-                .input_from_bytes(output.as_bytes())
-                .language("yaml")
-                .print()?;
-        }
-        Commands::ListLessons { course, chapter } => {
-            let lessons = get_lessons(&course, chapter).context("Failed to get lessons")?;
-            let output: String = lessons
-                .iter()
-                .enumerate()
-                .map(|(i, title)| format!("{}: {}\n", i + 1, title))
-                .collect();
-
-            bat::PrettyPrinter::new()
-                .input_from_bytes(output.as_bytes())
-                .language("yaml")
-                .print()?;
+        if let Event::Key(key) = event::read()?
+            && key.kind == KeyEventKind::Press
+        {
+            if app.is_search_mode {
+                match key.code {
+                    KeyCode::Esc => app.exit_search(),
+                    KeyCode::Enter => app.submit_search(),
+                    KeyCode::Backspace => app.pop_search(),
+                    KeyCode::Char(c) => app.append_search(c),
+                    _ => {}
+                }
+            } else {
+                match key.code {
+                    KeyCode::Char('q') => break,
+                    KeyCode::Esc => app.back_to_courses(),
+                    KeyCode::Left | KeyCode::Char('h') => app.go_back(),
+                    KeyCode::Up | KeyCode::Char('k') => app.move_up(),
+                    KeyCode::Down | KeyCode::Char('j') => app.move_down(),
+                    KeyCode::Enter | KeyCode::Right | KeyCode::Char('l') => app.select(),
+                    KeyCode::Char('/') => app.enter_search(),
+                    _ => {}
+                }
+            }
         }
     }
 
