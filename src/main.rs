@@ -1,3 +1,12 @@
+#![forbid(unsafe_code)]
+#![warn(clippy::pedantic, clippy::nursery)]
+
+#[cfg(all(feature = "tls-rustls", feature = "tls-native"))]
+compile_error!("Choose exactly one TLS backend: `tls-rustls` or `tls-native`");
+
+#[cfg(not(any(feature = "tls-rustls", feature = "tls-native")))]
+compile_error!("Choose exactly one TLS backend: `tls-rustls` or `tls-native`");
+
 use clap::Parser;
 use ratatui::{
     DefaultTerminal,
