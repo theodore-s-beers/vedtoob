@@ -13,7 +13,7 @@ use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEventKind},
 };
 use std::io;
-use vedtoob::{app::App, pandoc_available, ui};
+use vedtoob::{app::App, nav::Navigation, pandoc_available, ui};
 
 #[derive(Parser, Debug)]
 #[command(
