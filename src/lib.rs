@@ -9,6 +9,7 @@
 pub mod app;
 mod cache;
 mod fetch;
+pub mod nav;
 pub mod ui;
 
 use anyhow::Context;
