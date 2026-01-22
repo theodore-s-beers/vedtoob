@@ -1,4 +1,4 @@
-use crate::{fetch, highlight, prettify};
+use crate::{cache::Cache, fetch, highlight, prettify};
 use anyhow::anyhow;
 use ratatui::widgets::ListState;
 
@@ -45,6 +45,9 @@ pub struct App {
     pub selected_chapter_no: Option<usize>,
     pub selected_lesson_no: Option<usize>,
 
+    // In-memory cache
+    pub cache: Cache,
+
     // Readme scroll position
     pub readme_scroll: usize,
 
@@ -80,6 +83,7 @@ impl App {
             selected_course_uuid: None,
             selected_chapter_no: None,
             selected_lesson_no: None,
+            cache: Cache::default(),
             readme_scroll: 0,
             status: String::from("Loading courses..."),
         };
@@ -88,9 +92,19 @@ impl App {
     }
 
     pub fn load_courses(&mut self) {
+        if let Some(cached) = self.cache.courses() {
+            self.courses.clone_from(cached);
+            if !self.get_filtered_courses().is_empty() {
+                self.course_state.select(Some(0));
+            }
+            self.status = format!("Loaded {} courses", self.courses.len());
+            return;
+        }
+
         match fetch::get_course_slugs() {
             Ok(courses) => {
-                self.courses = courses;
+                self.courses.clone_from(&courses);
+                self.cache.set_courses(courses);
                 if !self.get_filtered_courses().is_empty() {
                     self.course_state.select(Some(0));
                 }
@@ -131,10 +145,19 @@ impl App {
         self.selected_course_title = Some(title);
         self.selected_course_uuid = None;
 
+        if let Some(chapters) = self.cache.chapters(&slug) {
+            self.chapters_highlighted = Self::highlight_numbered_list(chapters);
+            self.chapters = chapters.clone();
+            self.chapter_state.select(Some(0));
+            self.reset_lesson_content(true);
+            self.status = format!("Loaded {} chapters", self.chapters.len());
+            return;
+        }
+
         match fetch::get_chapters(&slug) {
             Ok(chapters) => {
                 self.chapters_highlighted = Self::highlight_numbered_list(&chapters);
-
+                self.cache.set_chapters(slug, chapters.clone());
                 self.chapters = chapters;
                 self.chapter_state.select(Some(0));
                 self.reset_lesson_content(true);
@@ -161,10 +184,20 @@ impl App {
                 }
             };
 
+            if let Some(lessons) = self.cache.lessons(&course_uuid, ch_no) {
+                self.lessons_highlighted = Self::highlight_numbered_list(lessons);
+                self.lessons = lessons.clone();
+                self.lesson_state.select(Some(0));
+                self.readme.clear();
+                self.status = format!("Loaded {} lessons", self.lessons.len());
+                return;
+            }
+
             match fetch::get_lessons_by_course_id(&course_uuid, ch_no) {
                 Ok(lessons) => {
                     self.lessons_highlighted = Self::highlight_numbered_list(&lessons);
-
+                    self.cache
+                        .set_lessons(course_uuid.clone(), ch_no, lessons.clone());
                     self.lessons = lessons;
                     self.lesson_state.select(Some(0));
                     self.readme.clear();
@@ -193,18 +226,43 @@ impl App {
                 }
             };
 
-            match fetch::get_lesson_id_by_course_id(&course_uuid, ch_no, lesson_no) {
-                Ok(lesson_id) => match fetch::get_readme_by_id(&lesson_id) {
-                    Ok(readme) => {
-                        self.readme = Self::highlight_markdown(&readme);
-                        self.status = String::from("Lesson loaded");
+            let lesson_id =
+                if let Some(cached_id) = self.cache.lesson_id(&course_uuid, ch_no, lesson_no) {
+                    cached_id.clone()
+                } else {
+                    match fetch::get_lesson_id_by_course_id(&course_uuid, ch_no, lesson_no) {
+                        Ok(fetched_id) => {
+                            self.cache.set_lesson_id(
+                                course_uuid.clone(),
+                                ch_no,
+                                lesson_no,
+                                fetched_id.clone(),
+                            );
+                            fetched_id
+                        }
+                        Err(e) => {
+                            self.status = format!("Error getting lesson ID: {}", e);
+                            return;
+                        }
                     }
-                    Err(e) => {
-                        self.status = format!("Error loading readme: {}", e);
-                    }
-                },
+                };
+
+            if let Some(cached_readme) = self.cache.readme(&lesson_id) {
+                self.readme = cached_readme.clone();
+                self.status = String::from("Lesson loaded");
+                return;
+            }
+
+            match fetch::get_readme_by_id(&lesson_id) {
+                Ok(readme) => {
+                    let highlighted = Self::highlight_markdown(&readme);
+                    self.cache
+                        .set_readme(lesson_id.clone(), highlighted.clone());
+                    self.readme = highlighted;
+                    self.status = String::from("Lesson loaded");
+                }
                 Err(e) => {
-                    self.status = format!("Error getting lesson ID: {}", e);
+                    self.status = format!("Error loading readme: {}", e);
                 }
             }
         }
@@ -219,7 +277,14 @@ impl App {
             .selected_course_slug
             .as_deref()
             .ok_or_else(|| anyhow!("No course selected"))?;
+
+        if let Some(uuid) = self.cache.course_uuid(slug) {
+            self.selected_course_uuid = Some(uuid.clone());
+            return Ok(uuid.clone());
+        }
+
         let uuid = fetch::get_course_id(slug)?;
+        self.cache.set_course_uuid(slug.to_owned(), uuid.clone());
         self.selected_course_uuid = Some(uuid.clone());
         Ok(uuid)
     }
