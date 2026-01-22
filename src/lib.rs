@@ -7,6 +7,7 @@
 )]
 
 pub mod app;
+mod cache;
 mod fetch;
 pub mod ui;
 
