@@ -38,8 +38,7 @@ pub fn pandoc_available() -> bool {
     Command::new("pandoc")
         .arg("--version")
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
 }
 
 pub fn prettify(readme: &str) -> Result<String, anyhow::Error> {
